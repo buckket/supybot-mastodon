@@ -182,8 +182,10 @@ class Mastodon(callbacks.Plugin):
             return
         api = self._get_mastodon_api(msg)
         try:
-            api.account_follow(user)
-            irc.reply("Alles klar.")
+            user_list = api.account_search(user)
+            if user_list:
+                api.account_follow(user_list[0])
+                irc.reply("Alles klar.")
         except MastodonError as e:
             log.error("Mastodon.follow: {}".format(repr(e)))
             irc.reply("Das hat nicht geklappt.")
@@ -197,8 +199,10 @@ class Mastodon(callbacks.Plugin):
             return
         api = self._get_mastodon_api(msg)
         try:
-            api.account_unfollow(user)
-            irc.reply("Alles klar.")
+            user_list = api.account_search(user, following=True)
+            if user_list:
+                api.account_unfollow(user_list[0])
+                irc.reply("Alles klar.")
         except MastodonError as e:
             log.error("Mastodon.unfollow: {}".format(repr(e)))
             irc.reply("Das hat nicht geklappt.")
