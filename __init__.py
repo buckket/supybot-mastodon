@@ -33,9 +33,9 @@ This plugin resolves Mastodon URLs and is able to control a Mastodon profile.
 This includes: toots, replies, favs and boosts. Fun guaranteed! Handle with care!
 """
 
+import sys
 import supybot
-import supybot.world as world
-import imp
+from supybot import world
 
 # Use this for the version of this plugin.  You may wish to put a CVS keyword
 # in here if you're keeping the plugin in CVS or some similar system.
@@ -53,7 +53,13 @@ __url__ = "https://github.com/buckket/supybot-mastodon"
 
 from . import config
 from . import plugin
-imp.reload(plugin) # In case we're being reloaded.
+if sys.version_info >= (3, 4):
+    from importlib import reload
+else:
+    from imp import reload
+# In case we're being reloaded.
+reload(config)
+reload(plugin)
 # Add more reloads here if you add third-party modules and want them to be
 # reloaded when this plugin is reloaded.  Don't forget to import them as well!
 

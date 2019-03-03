@@ -28,13 +28,20 @@
 
 ###
 
-import supybot.conf as conf
-import supybot.registry as registry
+from supybot import conf, registry
+
+try:
+    from supybot.i18n import PluginInternationalization
+    _ = PluginInternationalization("Mastodon")
+except:
+    # Placeholder that allows to run the plugin on a bot
+    # without the i18n module
+    _ = lambda x: x
 
 
 def configure(advanced):
     # This will be called by supybot to configure this module.  advanced is
-    # a bool that specifies whether the user identified himself as an advanced
+    # a bool that specifies whether the user identified themself as an advanced
     # user or not.  You should effect your configuration by manipulating the
     # registry as appropriate.
     from supybot.questions import expect, anything, something, yn
@@ -47,14 +54,16 @@ Mastodon = conf.registerPlugin("Mastodon")
 #     registry.Boolean(False, """Help for someConfigVariableName."""))
 
 conf.registerChannelValue(Mastodon, "resolve",
-                          registry.Boolean(True, """Resolve Mastodon links on this channel"""))
+    registry.Boolean(True, _("""Resolve Mastodon links on this channel""")))
 conf.registerChannelValue(Mastodon, "client_id",
-                          registry.String("", """Mastodon OAuth client id""", private=True))
+    registry.String("", _("""Mastodon OAuth client id"""), private=True))
 conf.registerChannelValue(Mastodon, "client_secret",
-                          registry.String("", """Mastodon OAuth client secret""", private=True))
+    registry.String("", _("""Mastodon OAuth client secret"""), private=True))
 conf.registerChannelValue(Mastodon, "access_token",
-                          registry.String("", """Mastodon OAuth access_token""", private=True))
+    registry.String("", _("""Mastodon OAuth access_token"""), private=True))
 conf.registerChannelValue(Mastodon, "api_base_url",
-                          registry.String("", """Mastodon API base url""", private=True))
+    registry.String("", _("""Mastodon API base url"""), private=True))
+conf.registerChannelValue(Mastodon, "streaming",
+    registry.Boolean(False, _("""Enable Streaming API for this channel""")))
 conf.registerChannelValue(Mastodon, "bot_enabled",
-                          registry.Boolean(False, """Enable Mastodon bot for this channel"""))
+    registry.Boolean(False, _("""Enable Mastodon bot for this channel""")))

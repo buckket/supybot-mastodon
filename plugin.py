@@ -38,12 +38,39 @@ import supybot.schedule as schedule
 import supybot.ircmsgs as ircmsgs
 import supybot.log as log
 
+try:
+    from supybot.i18n import PluginInternationalization, internationalizeDocstring
+    _ = PluginInternationalization("Mastodon")
+except ImportError:
+    # Placeholder that allows to run the plugin on a bot
+    # without the i18n module
+    _ = lambda x: x
+
+
 import re
 import html
 import textwrap
 
 from mastodon import Mastodon as MastodonAPI
-from mastodon import MastodonError
+from mastodon import MastodonError, StreamListener
+
+
+class SupybotStreamListener(StreamListener):
+    def __init__(self, irc, channel):
+        self.irc = irc
+        self.channel = channel
+
+    def on_notification(self, notification):
+        if notification["type"] == "mention":
+            text = notification["status"]["content"].replace("\n", " ")
+            text = re.sub(re.compile('<.*?>'), '', text)
+            text = html.unescape(text)
+            message = _("Mention by @{}: {} – {}").format(notification["status"]["account"]["username"], text,
+                                                          notification["status"]["url"])
+            message = ircutils.safeArgument(message)
+            log.info(message)
+            for line in textwrap.wrap(message, 400):
+                self.irc.queueMsg(ircmsgs.notice(self.channel, line))
 
 
 class Mastodon(callbacks.Plugin):
@@ -53,11 +80,28 @@ class Mastodon(callbacks.Plugin):
         self.__parent = super(Mastodon, self)
         self.__parent.__init__(irc)
 
+        self.streaming_channels = []
+        for channel in irc.state.channels:
+            if self.registryValue("streaming", channel):
+                listener = SupybotStreamListener(irc=irc, channel=channel)
+                api = MastodonAPI(client_id=self.registryValue("client_id", channel),
+                                  client_secret=self.registryValue("client_secret", channel),
+                                  access_token=self.registryValue("access_token", channel),
+                                  api_base_url=self.registryValue("api_base_url", channel))
+                streaming = api.stream_user(listener=listener, run_async=True, reconnect_async=True)
+                log.info("Enabled Mastodon Streaming API for: {}".format(channel))
+                self.streaming_channels.append(streaming)
+
+    def die(self):
+        for streaming in self.streaming_channels:
+            streaming.close()
+        self.__parent.die()
+
     def _is_bot_enabled(self, msg, irc=None):
         if self.registryValue("bot_enabled", msg.args[0]):
             return True
         if irc:
-            irc.reply("Dieser Kanal hat keinen Mastodon Account.")
+            irc.reply(_("This channel has no associated Mastodon account."))
         return False
 
     def _get_mastodon_api(self, msg):
@@ -84,7 +128,7 @@ class Mastodon(callbacks.Plugin):
                     message = utils.str.ellipsisify(text, 500)
                     status = api.status_reply(to_status=to_status, status=message)
                 else:
-                    irc.reply("Du musst mir schon einen Toot geben, auf den sich der Unsinn beziehen soll.")
+                    irc.reply(_("Please specify a toot to reply to."))
                     return
             else:
                 message = utils.str.ellipsisify(text, 500)
@@ -92,21 +136,22 @@ class Mastodon(callbacks.Plugin):
             irc.reply(status["url"])
         except MastodonError as e:
             log.error("Mastodon.toot: {}".format(repr(e)))
-            irc.reply("Das hat nicht geklappt.")
+            irc.error(_("An error has occurred."))
 
+    @internationalizeDocstring
     def mastodon(self, irc, msg, args):
         """Returns the link to the bot's Mastodon profile."""
-        if self.registryValue("bot_enabled", msg.args[0]):
-            try:
-                api = self._get_mastodon_api(msg)
-                account = api.account_verify_credentials()
-                irc.reply(account["url"])
-            except MastodonError as e:
-                log.error("Mastodon.mastodon: {}".format(repr(e)))
-                irc.reply("Das hat nicht geklappt.")
-        else:
-            irc.reply("Dieser Kanal hat keinen Mastodon Account.")
+        if not self._is_bot_enabled(msg, irc):
+            return
+        try:
+            api = self._get_mastodon_api(msg)
+            account = api.account_verify_credentials()
+            irc.reply(account["url"])
+        except MastodonError as e:
+            log.error("Mastodon.mastodon: {}".format(repr(e)))
+            irc.error(_("An error has occurred."))
 
+    @internationalizeDocstring
     def toot(self, irc, msg, args, text):
         """<text>
 
@@ -114,6 +159,7 @@ class Mastodon(callbacks.Plugin):
         """
         self._toot(irc, msg, text)
 
+    @internationalizeDocstring
     def reply(self, irc, msg, args, toot, text):
         """<toot url> <text>
 
@@ -121,11 +167,11 @@ class Mastodon(callbacks.Plugin):
         """
         self._toot(irc, msg, text, toot)
 
+    @internationalizeDocstring
     def fav(self, irc, msg, args, toot):
         """<toot url>
 
-        Favs toot <toot
-         url>
+        Favs toot <toot url>
         """
         if not self._is_bot_enabled(msg, irc):
             return
@@ -134,11 +180,12 @@ class Mastodon(callbacks.Plugin):
         if fav_status:
             try:
                 api.status_favourite(fav_status)
-                irc.reply("Alles klar.")
+                irc.reply(_("Done."))
             except MastodonError as e:
                 log.error("Mastodon.fav: {}".format(repr(e)))
-                irc.reply("Das hat nicht geklappt.")
+                irc.error(_("An error has occurred."))
 
+    @internationalizeDocstring
     def boost(self, irc, msg, args, toot):
         """<toot url>
 
@@ -151,11 +198,12 @@ class Mastodon(callbacks.Plugin):
         if boost_status:
             try:
                 api.status_reblog(boost_status)
-                irc.reply("Alles klar.")
+                irc.reply(_("Done."))
             except MastodonError as e:
                 log.error("Mastodon.boost: {}".format(repr(e)))
-                irc.reply("Das hat nicht geklappt.")
+                irc.error(_("An error has occurred."))
 
+    @internationalizeDocstring
     def delete(self, irc, msg, args, toot):
         """<toot url>
 
@@ -168,11 +216,12 @@ class Mastodon(callbacks.Plugin):
         if delete_status:
             try:
                 api.status_delete(delete_status)
-                irc.reply("Alles klar.")
+                irc.reply(_("Done."))
             except MastodonError as e:
                 log.error("Mastodon.delete: {}".format(repr(e)))
-                irc.reply("Das hat nicht geklappt.")
+                irc.error(_("An error has occurred."))
 
+    @internationalizeDocstring
     def follow(self, irc, msg, args, user):
         """<user uri>
 
@@ -185,11 +234,12 @@ class Mastodon(callbacks.Plugin):
             user_list = api.account_search(user)
             if user_list:
                 api.account_follow(user_list[0])
-                irc.reply("Alles klar.")
+                irc.reply(_("Done."))
         except MastodonError as e:
             log.error("Mastodon.follow: {}".format(repr(e)))
-            irc.reply("Das hat nicht geklappt.")
+            irc.error(_("An error has occurred."))
 
+    @internationalizeDocstring
     def unfollow(self, irc, msg, args, user):
         """<user uri>
 
@@ -202,10 +252,10 @@ class Mastodon(callbacks.Plugin):
             user_list = api.account_search(user, following=True)
             if user_list:
                 api.account_unfollow(user_list[0])
-                irc.reply("Alles klar.")
+                irc.reply(_("Done."))
         except MastodonError as e:
             log.error("Mastodon.unfollow: {}".format(repr(e)))
-            irc.reply("Das hat nicht geklappt.")
+            irc.error(_("An error has occurred."))
 
     def doPrivmsg(self, irc, msg):
         if ircmsgs.isCtcp(msg) and not ircmsgs.isAction(msg):
@@ -219,9 +269,8 @@ class Mastodon(callbacks.Plugin):
                         text = status["content"].replace("\n", " ")
                         text = re.sub(re.compile('<.*?>'), '', text)
                         text = html.unescape(text)
-                        message = "Toot von @{}: {}".format(status["account"]["acct"], text)
+                        message = _("Toot by @{}: {}").format(status["account"]["acct"], text)
                         message = ircutils.safeArgument(message)
-
                         for line in textwrap.wrap(message, 400):
                             irc.queueMsg(ircmsgs.notice(msg.args[0], line))
                     except MastodonError as e:
