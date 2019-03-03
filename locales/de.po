@@ -15,7 +15,7 @@ msgstr ""
 "X-Generator: Poedit 2.2.1\n"
 "Last-Translator: \n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
-"Language: de_DE\n"
+"Language: de\n"
 
 #: config.py:57
 msgid "Resolve Mastodon links on this channel"
